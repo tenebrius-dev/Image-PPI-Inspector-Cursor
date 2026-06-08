@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    :root {
+      --text-primary: rgba(0, 0, 0, 0.9);
+      --text-secondary: rgba(0, 0, 0, 0.45);
+      --figma-blue: #0d99ff;
+      --bg-input: #f5f5f5;
+      --border-hover: #e6e6e6;
+      --font-stack: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    html, body {
+      margin: 0; padding: 0; overflow: hidden;
+      font-family: var(--font-stack); background-color: #ffffff; color: var(--text-primary);
+      -webkit-font-smoothing: antialiased; user-select: none;
+    }
+
+    .container { display: flex; flex-direction: column; width: 100%; }
+
+    .empty-state {
+      display: flex; flex-direction: column; 
+      padding: 16px; box-sizing: border-box; width: 100%; gap: 16px;
+    }
+    .empty-state-content {
+      display: flex; flex-direction: column; align-items: center; justify-content: center; 
+      text-align: center; color: var(--text-secondary); font-size: 11px;
+    }
+
+    .btn-secondary {
+      background-color: transparent; border: 1px solid #e6e6e6; color: var(--text-primary);
+      border-radius: 6px; height: 32px; padding: 0 16px; font-family: var(--font-stack);
+      font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.1s ease;
+      display: flex; align-items: center; justify-content: center; width: 100%; flex-shrink: 0;
+    }
+    .btn-secondary:hover { background-color: #f9f9f9; border-color: #d1d1d1; }
+
+    .scan-list { display: flex; flex-direction: column; overflow-y: auto; max-height: 350px; }
+    .scan-item { 
+      display: flex; justify-content: space-between; align-items: center; 
+      padding: 10px 16px; border-bottom: 1px solid #e6e6e6; cursor: pointer; transition: background 0.1s; 
+    }
+    .scan-item:hover { background-color: #f5f5f5; }
+    .scan-item-name { 
+      font-size: 11px; font-weight: 500; text-overflow: ellipsis; 
+      white-space: nowrap; overflow: hidden; max-width: 190px; color: var(--text-primary);
+    }
+    .scan-item-ppi { font-size: 11px; font-weight: 600; flex-shrink: 0; }
+
+    .toolbar {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0 12px; border-bottom: 1px solid #e6e6e6;
+      background: #f9f9f9; height: 32px; flex-shrink: 0;
+    }
+
+    .nav-btn { 
+      cursor: pointer; border: none; background: none; font-size: 14px; 
+      padding: 4px 0; color: var(--figma-blue); font-weight: 500; 
+      display: flex; align-items: center; 
+    }
+    .nav-btn:disabled { color: #ccc; cursor: default; }
+    .counter { font-size: 11px; font-weight: 400; color: var(--text-secondary); }
+
+    .data-content { display: flex; flex-direction: column; padding: 0 16px; }
+    .section-1 { padding: 16px 0 12px 0; border-bottom: 1px solid #e6e6e6; display: flex; flex-direction: column; gap: 8px; }
+    .section-2 { padding: 16px 0 12px 0; border-bottom: 1px solid #e6e6e6; display: flex; flex-direction: column; gap: 8px; }
+    .section-3 { padding: 12px 0 16px 0; display: flex; flex-direction: column; gap: 8px; }
+
+    .row { display: flex; justify-content: space-between; align-items: center; min-height: 16px; width: 100%; }
+    .layer-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 16px; width: 100%; position: relative; }
+    .label { font-size: 11px; font-weight: 400; color: var(--text-secondary); letter-spacing: -0.01em; flex-shrink: 0; }
+    
+    .layer-name-container { flex: 1; min-width: 0; position: relative; display: flex; justify-content: flex-end; height: 16px; }
+    .layer-name-value { font-size: 11px; font-weight: 500; color: var(--text-primary); letter-spacing: -0.01em; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; width: 100%; line-height: 16px; }
+
+    .tooltip {
+      visibility: hidden; opacity: 0; position: absolute; top: -5px; right: -9px; background-color: #f5f5f5; border: 1px solid #d1d1d1;
+      color: var(--text-primary); padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; line-height: 16px; 
+      white-space: normal; word-break: break-all; z-index: 100; width: calc(100% + 2px); min-width: 120px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08); transition: opacity 0.1s; pointer-events: none; text-align: right;
+    }
+    .layer-name-container.is-truncated:hover .tooltip { visibility: visible; opacity: 1; }
+
+    .value { font-size: 11px; font-weight: 500; text-align: right; color: var(--text-primary); letter-spacing: -0.01em; }
+    
+    .warning { color: #f24822; }
+    .caution { color: #d97706; }
+    .success { color: #14a594; }
+    .ppi-value { font-weight: 600 !important; }
+
+    .copyable { cursor: pointer; transition: opacity 0.1s ease; }
+    .copyable:hover { opacity: 0.6; }
+    .copyable:active { opacity: 0.3; }
+
+    .action-link { font-size: 11px; color: var(--figma-blue); cursor: pointer; font-weight: 500; text-align: right; }
+    .action-link:hover { text-decoration: underline; }
+
+    .variable_control--inputWrapper--LUhHu { display: flex; width: 85px; flex-shrink: 0; }
+    .scrubbable_control--containerBordered---60m8 { display: flex; align-items: center; width: 100%; height: 24px; padding: 0 8px; background-color: var(--bg-input); border-radius: 4px; border: 1px solid transparent; box-sizing: border-box; transition: all 0.1s; }
+    .scrubbable_control--containerBordered---60m8:hover { border-color: var(--border-hover); }
+    .scrubbable_control--containerBordered---60m8:focus-within { background-color: var(--bg-input) !important; border-color: var(--figma-blue) !important; outline: none; }
+    .transform_panel--inactiveLabel--ffsiD { font-size: 11px; font-weight: 400; color: #00000080; padding-right: 2px; }
+    .raw_components--textInput--DZIFa { width: 100%; border: none; background: transparent; outline: none; font-family: var(--font-stack); font-size: 11px; font-weight: 500; color: var(--text-primary); text-align: center; letter-spacing: -0.01em; }
+
+    input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none !important; margin: 0 !important; }
+    input[type=number] { -moz-appearance: textfield !important; appearance: none !important; }
+
+    button#resizeBtn { background-color: var(--figma-blue); color: white; border: none; border-radius: 6px; height: 32px; width: 100%; margin-top: 4px; font-family: var(--font-stack); font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    button#resizeBtn:hover { background-color: #0087f5; }
+  </style>
+</head>
+<body>
+  <div id="app" class="container"></div>
+  <script>
+    let currentImages = [];
+    let currentIndex = 0;
+    
+    let listContext = ""; 
+    let listTotal = 0;
+    let isReviewMode = false;
+    
+    let currentTargetPpi = 300;
+
+    function fmt(val) {
+      if (val === undefined || val === null) return "0";
+      return parseFloat(Number(val).toFixed(2)).toString().replace('.', ',');
+    }
+
+    function updateSize() {
+      requestAnimationFrame(() => {
+        const container = document.getElementById('app');
+        let height = container.scrollHeight;
+        if (height > 500) height = 500; 
+        parent.postMessage({ pluginMessage: { type: 'resize-window', width: 300, height: height } }, '*');
+      });
+    }
+
+    function copyValue(value, toastMsg) {
+      const textarea = document.createElement('textarea');
+      textarea.value = value;
+      textarea.style.position = 'fixed'; textarea.style.opacity = '0';
+      document.body.appendChild(textarea); textarea.select(); document.execCommand('copy'); document.body.removeChild(textarea);
+      parent.postMessage({ pluginMessage: { type: 'notify', msg: toastMsg } }, '*');
+    }
+
+    window.handleCopy = function(e, value, label) {
+      e.stopPropagation(); copyValue(value, `Copied: ${value}`);
+    };
+
+    function renderEmpty() {
+      const app = document.getElementById('app');
+      app.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-content">
+            <div>Select an image to inspect...</div>
+          </div>
+          <button class="btn-secondary" onclick="startScan()">Scan Page for Low PPI</button>
+        </div>
+      `;
+      updateSize();
+    }
+
+    window.startScan = function() {
+      const app = document.getElementById('app');
+      app.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-content">
+            <div style="color: var(--figma-blue); font-weight: 500;">Scanning page...</div>
+            <div style="font-size: 10px;">This may take a moment on large files</div>
+          </div>
+        </div>
+      `;
+      updateSize();
+      parent.postMessage({ pluginMessage: { type: 'scan-page' } }, '*');
+    }
+
+    function renderList() {
+      const app = document.getElementById('app');
+      
+      if (currentImages.length === 0) {
+        app.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-content">
+              <div class="success" style="font-size: 14px; font-weight: 600;">✅ All clear!</div>
+              <div style="margin-top: 4px;">Scanned ${listTotal} images.<br>No low PPI issues found.</div>
+            </div>
+            <button class="btn-secondary" onclick="renderEmpty()">Back</button>
+          </div>
+        `;
+        updateSize();
+        return;
+      }
+
+      const listHtml = currentImages.map(img => {
+        let ppiClass = 'success';
+        if (img.ppi < 250) ppiClass = 'warning';
+        else if (img.ppi < 300) ppiClass = 'caution';
+
+        return `
+        <div class="scan-item" onclick="enterReviewMode('${img.id}')">
+          <div class="scan-item-name" title="${img.name}">${img.name}</div>
+          <div class="scan-item-ppi ${ppiClass}">${fmt(img.ppi)} PPI</div>
+        </div>
+        `;
+      }).join('');
+
+      let title = listContext === "Scan" ? `${currentImages.length} issues found` : `${currentImages.length} images in selected frame`;
+      let subtitle = listContext === "Scan" ? `<span class="counter">(out of ${listTotal})</span>` : '';
+      let backBtn = listContext === "Scan" ? `<button class="nav-btn" style="font-size: 11px; padding-left: 0;" onclick="renderEmpty()">Back</button>` : ``;
+
+      app.innerHTML = `
+        <div class="toolbar" style="display: grid; grid-template-columns: 1fr auto 1fr;">
+          <div style="display: flex; align-items: center;">
+            ${backBtn}
+          </div>
+          <div style="display: flex; align-items: center; justify-content: center; gap: 4px;">
+            <span class="counter" style="font-weight: 500; color: var(--text-primary);">${title}</span>
+            ${subtitle}
+          </div>
+          <div></div>
+        </div>
+        <div class="scan-list">
+          ${listHtml}
+        </div>
+      `;
+      updateSize();
+    }
+
+    window.enterReviewMode = function(id) {
+      isReviewMode = true;
+      currentIndex = currentImages.findIndex(img => img.id === id);
+      parent.postMessage({ pluginMessage: { type: 'focus-node', nodeId: id } }, '*');
+      renderImage();
+    };
+
+    window.viewList = function() {
+      isReviewMode = false;
+      renderList();
+    };
+
+    window.handlePpiInput = function(val) {
+      let ppi = parseFloat(val);
+      if (isNaN(ppi) || ppi <= 0) return;
+      currentTargetPpi = ppi;
+      
+      const img = currentImages[currentIndex];
+      if (img) {
+        // НОВАЯ ЛОГИКА: Расчет Max Print от видимой печатной области
+        const maxPrintW = img.printW * (img.ppi / currentTargetPpi);
+        const maxPrintH = img.printH * (img.ppi / currentTargetPpi);
+        const maxPrintStr = `${fmt(maxPrintW)} × ${fmt(maxPrintH)} mm`;
+        
+        const maxPrintEl = document.getElementById('maxPrintVal');
+        if (maxPrintEl) {
+          maxPrintEl.textContent = maxPrintStr;
+          maxPrintEl.setAttribute('onclick', `handleCopy(event, '${maxPrintStr}', 'Max Print')`);
+        }
+      }
+    };
+
+    function renderImage() {
+      const app = document.getElementById('app');
+      if (currentImages.length === 0) { renderEmpty(); return; }
+      const img = currentImages[currentIndex];
+      
+      const scaleStr = `${fmt(img.resScaleX)}% × ${fmt(img.resScaleY)}%`;
+      const curSizeStr = `${fmt(img.curW)} × ${fmt(img.curH)} px`;
+      const origSizeStr = `${fmt(img.origW)} × ${fmt(img.origH)} px`;
+      const ppiStr = `${fmt(img.ppi)}`;
+      const printSizeStr = `${fmt(img.printW)} × ${fmt(img.printH)} mm`;
+      
+      // НОВАЯ ЛОГИКА: Расчет Max Print от видимой печатной области (Print Size * (Effective PPI / Target PPI))
+      const maxPrintW = img.printW * (img.ppi / currentTargetPpi);
+      const maxPrintH = img.printH * (img.ppi / currentTargetPpi);
+      const maxPrintStr = `${fmt(maxPrintW)} × ${fmt(maxPrintH)} mm`;
+
+      let ppiClass = 'success';
+      if (img.ppi < 250) {
+        ppiClass = 'warning';
+      } else if (img.ppi < 300) {
+        ppiClass = 'caution';
+      }
+
+      let toolbarHtml = '';
+      if (isReviewMode || currentImages.length > 1) {
+        toolbarHtml = `
+          <div class="toolbar">
+            <div style="display: flex; align-items: center;">
+              ${isReviewMode ? `<button class="nav-btn" onclick="viewList()" style="font-size: 11px; padding-left: 0;">Image List</button>` : ``}
+            </div>
+            
+            ${currentImages.length > 1 ? `
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <button class="nav-btn" id="prevBtn" ${currentIndex === 0 ? 'disabled' : ''}>&larr;</button>
+              <span class="counter">Image ${currentIndex + 1} of ${currentImages.length}</span>
+              <button class="nav-btn" id="nextBtn" ${currentIndex === currentImages.length - 1 ? 'disabled' : ''}>&rarr;</button>
+            </div>
+            ` : `<div></div>`}
+          </div>
+        `;
+      }
+
+      app.innerHTML = `
+        ${toolbarHtml}
+        <div class="data-content">
+          <div class="section-1">
+            <div class="layer-row">
+              <span class="label">Layer Name</span>
+              <div class="layer-name-container">
+                <span class="layer-name-value copyable" title="Click to copy" onclick="handleCopy(event, '${img.name.replace(/'/g, "\\'")}', 'Layer Name')">${img.name}</span>
+                <div class="tooltip">${img.name}</div>
+              </div>
+            </div>
+            <div class="row"><span class="label">Scale</span><span class="value copyable" title="Click to copy" onclick="handleCopy(event, '${scaleStr}', 'Scale')">${scaleStr}</span></div>
+            <div class="row"><span class="label">Current Size</span><span class="value copyable" title="Click to copy" onclick="handleCopy(event, '${curSizeStr}', 'Current Size')">${curSizeStr}</span></div>
+            <div class="row"><span class="label">Original Size</span><span class="value copyable" title="Click to copy" onclick="handleCopy(event, '${origSizeStr}', 'Original Size')">${origSizeStr}</span></div>
+            <div class="row" style="justify-content: flex-end;"><span class="action-link" id="downloadBtn">Download Original</span></div>
+          </div>
+          
+          <div class="section-2">
+            <div class="row"><span class="label">Effective PPI</span><span class="value copyable ppi-value ${ppiClass}" title="Click to copy" onclick="handleCopy(event, '${ppiStr}', 'PPI')">${ppiStr}</span></div>
+            <div class="row"><span class="label">Size (W × H)</span><span class="value copyable" title="Click to copy" onclick="handleCopy(event, '${printSizeStr}', 'Print Size')">${printSizeStr}</span></div>
+            <div class="row" style="justify-content: flex-end;"><span class="action-link" id="copyInfoBtn">Copy Info</span></div>
+          </div>
+          
+          <div class="section-3">
+            <div class="row">
+              <span class="label">Target PPI</span>
+              <div class="variable_control--inputWrapper--LUhHu">
+                <label class="scrubbable_control--containerBordered---60m8">
+                  <span class="transform_panel--inactiveLabel--ffsiD">PPI</span>
+                  <div style="flex:1; display:flex;">
+                    <input type="number" id="targetPpi" class="raw_components--textInput--DZIFa" value="${currentTargetPpi}" oninput="handlePpiInput(this.value)" onfocus="this.select()">
+                  </div>
+                </label>
+              </div>
+            </div>
+            <div class="row"><span class="label">Max Print</span><span class="value copyable" id="maxPrintVal" title="Click to copy" onclick="handleCopy(event, '${maxPrintStr}', 'Max Print')">${maxPrintStr}</span></div>
+            <button id="resizeBtn">Resize to Target PPI</button>
+          </div>
+        </div>
+      `;
+
+      const nameEl = app.querySelector('.layer-name-value');
+      const container = app.querySelector('.layer-name-container');
+      if (nameEl && container && nameEl.scrollWidth > nameEl.offsetWidth) {
+        container.classList.add('is-truncated');
+      }
+
+      if (currentImages.length > 1) {
+        const prev = document.getElementById('prevBtn');
+        const next = document.getElementById('nextBtn');
+        if (prev) prev.onclick = () => { 
+          currentIndex--; 
+          if (isReviewMode) parent.postMessage({ pluginMessage: { type: 'focus-node', nodeId: currentImages[currentIndex].id } }, '*');
+          renderImage(); 
+        };
+        if (next) next.onclick = () => { 
+          currentIndex++; 
+          if (isReviewMode) parent.postMessage({ pluginMessage: { type: 'focus-node', nodeId: currentImages[currentIndex].id } }, '*');
+          renderImage(); 
+        };
+      }
+      
+      document.getElementById('downloadBtn').onclick = () => { parent.postMessage({ pluginMessage: { type: 'download-image', nodeId: img.id } }, '*'); };
+      document.getElementById('copyInfoBtn').onclick = () => {
+        const infoText = `Layer: ${img.name}\nSize: ${curSizeStr} (${printSizeStr})\nScale: ${scaleStr}\nEffective PPI: ${ppiStr}`;
+        copyValue(infoText, '📋 Copied Layer Info');
+      };
+      document.getElementById('resizeBtn').onclick = () => {
+        const ppi = parseFloat(document.getElementById('targetPpi').value);
+        parent.postMessage({ pluginMessage: { type: 'resize', targetPpi: ppi, nodeId: img.id, origW: img.origW, aspectRatio: img.aspectRatio } }, '*');
+      };
+      updateSize();
+    }
+
+    onmessage = (event) => {
+      const msg = event.data.pluginMessage;
+      
+      if (msg.type === "images-list") {
+        if (isReviewMode) {
+          const updatedImgIndex = msg.images.findIndex(img => img.id === currentImages[currentIndex].id);
+          if (updatedImgIndex !== -1) {
+            currentImages[currentIndex] = msg.images[updatedImgIndex];
+            renderImage();
+            return;
+          }
+        }
+        
+        currentImages = msg.images;
+        listTotal = msg.images.length;
+        listContext = "Selection";
+
+        if (currentImages.length === 0) {
+          isReviewMode = false;
+          renderEmpty();
+        } else if (currentImages.length === 1) {
+          isReviewMode = false;
+          currentIndex = 0;
+          renderImage();
+        } else {
+          isReviewMode = false;
+          renderList();
+        }
+      } 
+      else if (msg.type === "clear") {
+        isReviewMode = false;
+        currentImages = []; currentIndex = 0;
+        renderEmpty();
+      } 
+      else if (msg.type === "scan-results") {
+        currentImages = msg.images;
+        listTotal = msg.total;
+        listContext = "Scan";
+        isReviewMode = false;
+        renderList();
+      } 
+      else if (msg.type === "download-file") {
+        const blob = new Blob([msg.bytes], { type: 'image/png' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url; link.download = `${msg.name || 'image'}.png`;
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }
+    };
+    
+    renderEmpty();
+  </script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+# Игнорируем сборки
+node_modules/
+code.js
+
+# Игнорируем системные файлы macOS
+.DS_Store
+
+# Игнорируем настройки VS Code / Cursor
+.vscode/

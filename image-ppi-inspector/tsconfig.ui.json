@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2018", "DOM"],
+    "types": []
+  },
+  "include": ["src/ui.ts"],
+  "exclude": ["src/code.ts"]
+}
