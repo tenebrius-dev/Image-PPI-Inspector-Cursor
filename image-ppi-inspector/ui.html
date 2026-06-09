@@ -125,7 +125,6 @@
     let isReviewMode = false;
     let currentTargetPpi = 300;
     
-    // Глобальное состояние единиц измерения
     let currentUnit = 'px';
 
     let savedScanImages = null;
@@ -172,7 +171,6 @@
       e.stopPropagation(); copyValue(value, `Copied: ${value}`);
     };
     
-    // Функция переключения единиц измерения
     window.toggleUnit = function() {
       currentUnit = currentUnit === 'px' ? 'mm' : 'px';
       if (currentImages.length > 0 && currentIndex >= 0) {
@@ -229,7 +227,8 @@
         return `<div class="scan-item" onclick="enterReviewMode('${img.id}')"><div class="scan-item-name" title="${safeName}">${safeName}</div><div class="scan-item-ppi ${ppiClass}">${fmt(img.ppi)} PPI</div></div>`;
       }).join('');
 
-      let title = listContext === "Scan" ? `${currentImages.length} issues found` : `${currentImages.length} images in selected frame`;
+      // ИСПРАВЛЕНО: Теперь выводится "X issues found" для Scan и "X images selected" для Selection
+      let title = listContext === "Scan" ? `${currentImages.length} issues found` : `${currentImages.length} images selected`;
       let subtitle = listContext === "Scan" ? `<span class="counter">(out of ${listTotal})</span>` : '';
       let leftAction = listContext === "Scan" ? `<button class="nav-btn" onclick="clearScan()" style="font-size: 11px; padding-left: 0;">Clear</button>` : ``;
 
@@ -278,7 +277,6 @@
       let pY = currentUnit === 'mm' ? (img.posY / 72) * 25.4 : img.posY;
       const posStr = `X: ${fmt(pX)} ${currentUnit}, Y: ${fmt(pY)} ${currentUnit}`;
 
-      // ИСПРАВЛЕНА формула для конвертации оригинального размера по эффективному PPI
       let oW = currentUnit === 'mm' ? (img.origW / img.ppi) * 25.4 : img.origW;
       let oH = currentUnit === 'mm' ? (img.origH / img.ppi) * 25.4 : img.origH;
       const origSizeStr = `${fmt(oW)} × ${fmt(oH)} ${currentUnit}`;
@@ -305,7 +303,7 @@
             ${currentImages.length > 1 ? `<button class="nav-btn" id="prevBtn" ${currentIndex === 0 ? 'disabled' : ''}>&larr;</button><span class="counter">Image ${currentIndex + 1} of ${currentImages.length}</span><button class="nav-btn" id="nextBtn" ${currentIndex === currentImages.length - 1 ? 'disabled' : ''}>&rarr;</button>` : ``}
           </div>
           <div style="display: flex; align-items: center; justify-content: flex-end;">
-            <button class="nav-btn" onclick="toggleUnit()" style="font-size: 11px; padding-right: 0;" title="Toggle between Pixels and Millimeters">Unit: ${currentUnit.toUpperCase()}</button>
+            <button class="nav-btn" onclick="toggleUnit()" style="font-size: 11px; padding-right: 0;" title="Toggle between Pixels and Millimeters">Unit: ${currentUnit.toLowerCase()}</button>
           </div>
         </div>`;
 
@@ -346,7 +344,7 @@
         document.getElementById('nextBtn').onclick = () => { currentIndex++; if (isReviewMode) parent.postMessage({ pluginMessage: { type: 'focus-node', nodeId: currentImages[currentIndex].id } }, '*'); renderImage(); };
       }
       document.getElementById('downloadBtn').onclick = () => { parent.postMessage({ pluginMessage: { type: 'download-image', nodeId: img.id } }, '*'); };
-      document.getElementById('copyInfoBtn').onclick = () => { copyValue(`Layer: ${img.name}\nPositioning: ${posStr}\nSize: ${curSizeStr}\nOriginal Size: ${origSizeStr}\nScale: ${scaleStr}\nEffective PPI: ${ppiStr}`, '📋 Copied Layer Info'); };
+      document.getElementById('copyInfoBtn').onclick = () => { copyValue('Layer: ' + img.name + '\\nPositioning: ' + posStr + '\\nSize: ' + curSizeStr + '\\nOriginal Size: ' + origSizeStr + '\\nScale: ' + scaleStr + '\\nEffective PPI: ' + ppiStr, '📋 Copied Layer Info'); };
       document.getElementById('resizeBtn').onclick = () => { parent.postMessage({ pluginMessage: { type: 'resize', targetPpi: parseFloat(document.getElementById('targetPpi').value), nodeId: img.id, origW: img.origW, aspectRatio: img.aspectRatio } }, '*'); };
       updateSize();
     }
@@ -355,6 +353,16 @@
       const msg = event.data.pluginMessage;
       
       if (msg.type === "images-list") {
+        if (isReviewMode && msg.images.length === 1 && currentImages.length > 1) {
+            const selectedId = msg.images[0].id;
+            const idx = currentImages.findIndex(img => img.id === selectedId);
+            if (idx !== -1) {
+                currentImages[idx] = msg.images[0];
+                renderImage();
+                return;
+            }
+        }
+
         if (savedScanImages !== null) {
             msg.images.forEach(incomingImg => {
                 const sIdx = savedScanImages.findIndex(savedImg => savedImg.id === incomingImg.id);
@@ -382,6 +390,11 @@
         listTotal = msg.images.length; 
         listContext = "Selection"; 
         
+        if (msg.images.length > 1) {
+          savedScanImages = msg.images;
+          savedScanTotal = msg.images.length;
+        }
+
         if (currentImages.length === 0) renderEmpty(); 
         else if (currentImages.length === 1) { currentIndex = 0; renderImage(); } 
         else renderList();
