@@ -129,6 +129,9 @@
 
     let savedScanImages = null;
     let savedScanTotal = 0;
+    
+    // Хранилище ID исходного выделения (фрейм, группа или массив элементов)
+    let initialSelectionIds = [];
 
     function escapeHtml(str) {
       if (!str) return "";
@@ -185,6 +188,7 @@
       currentIndex = 0;
       listContext = "";
       isReviewMode = false;
+      initialSelectionIds = [];
       renderEmpty();
     };
 
@@ -227,7 +231,6 @@
         return `<div class="scan-item" onclick="enterReviewMode('${img.id}')"><div class="scan-item-name" title="${safeName}">${safeName}</div><div class="scan-item-ppi ${ppiClass}">${fmt(img.ppi)} PPI</div></div>`;
       }).join('');
 
-      // ИСПРАВЛЕНО: Теперь выводится "X issues found" для Scan и "X images selected" для Selection
       let title = listContext === "Scan" ? `${currentImages.length} issues found` : `${currentImages.length} images selected`;
       let subtitle = listContext === "Scan" ? `<span class="counter">(out of ${listTotal})</span>` : '';
       let leftAction = listContext === "Scan" ? `<button class="nav-btn" onclick="clearScan()" style="font-size: 11px; padding-left: 0;">Clear</button>` : ``;
@@ -250,7 +253,14 @@
       renderImage();
     };
 
-    window.viewList = function() { isReviewMode = false; renderList(); };
+    // ИСПРАВЛЕНО: При клике назад возвращаем изначальное выделение фрейма/группы на холсте Figma
+    window.viewList = function() { 
+      isReviewMode = false; 
+      if (listContext === "Selection" && initialSelectionIds.length > 0) {
+        parent.postMessage({ pluginMessage: { type: 'restore-selection', nodeIds: initialSelectionIds } }, '*');
+      }
+      renderList(); 
+    };
 
     window.handlePpiInput = function(val) {
       let ppi = parseFloat(val); if (isNaN(ppi) || ppi <= 0) return;
@@ -314,14 +324,13 @@
             <div class="layer-row"><span class="label">Layer Name</span><div class="layer-name-container"><span class="layer-name-value copyable" title="Click to copy" onclick="handleCopy(event, '${safeNameJs}', 'Layer Name')">${safeNameHtml}</span><div class="tooltip">${safeNameHtml}</div></div></div>
             <div class="row"><span class="label">Positioning</span><span class="value copyable" title="Click to copy" onclick="handleCopy(event, '${posStr}', 'Positioning')">${posStr}</span></div>
             <div class="row"><span class="label">Scale</span><span class="value copyable" title="Click to copy" onclick="handleCopy(event, '${scaleStr}', 'Scale')">${scaleStr}</span></div>
-            <div class="row"><span class="label">Current Size</span><span class="value copyable" title="Click to copy" onclick="handleCopy(event, '${curSizeStr}', 'Current Size')">${curSizeStr}</span></div>
             <div class="row"><span class="label">Original Size</span><span class="value copyable" title="Click to copy" onclick="handleCopy(event, '${origSizeStr}', 'Original Size')">${origSizeStr}</span></div>
-            <div class="row" style="justify-content: flex-end;"><span class="action-link" id="downloadBtn">Download Original</span></div>
+            <div class="row" style="justify-content: flex-end;"><span class="action-link" id="downloadBtn">Download Original Image</span></div>
           </div>
           <div class="section-2">
             <div class="row"><span class="label">Effective PPI</span><span class="value copyable ppi-value ${ppiClass}" title="Click to copy" onclick="handleCopy(event, '${ppiStr}', 'PPI')">${ppiStr}</span></div>
-            <div class="row"><span class="label">Size (W × H)</span><span class="value copyable" title="Click to copy" onclick="handleCopy(event, '${printSizeStr}', 'Print Size')">${printSizeStr}</span></div>
-            <div class="row" style="justify-content: flex-end;"><span class="action-link" id="copyInfoBtn">Copy Info</span></div>
+            <div class="row"><span class="label">Current Size</span><span class="value copyable" title="Click to copy" onclick="handleCopy(event, '${curSizeStr}', 'Current Size')">${curSizeStr}</span></div>
+            <div class="row" style="justify-content: flex-end;"><span class="action-link" id="copyInfoBtn">Copy Full Info</span></div>
           </div>
           <div class="section-3">
             <div class="row"><span class="label">Target PPI</span><div class="variable_control--inputWrapper--LUhHu"><label class="scrubbable_control--containerBordered---60m8"><span class="transform_panel--inactiveLabel--ffsiD">PPI</span><div style="flex:1; display:flex;"><input type="number" id="targetPpi" class="raw_components--textInput--DZIFa" value="${currentTargetPpi}" oninput="handlePpiInput(this.value)" onfocus="this.select()"></div></label></div></div>
@@ -344,7 +353,8 @@
         document.getElementById('nextBtn').onclick = () => { currentIndex++; if (isReviewMode) parent.postMessage({ pluginMessage: { type: 'focus-node', nodeId: currentImages[currentIndex].id } }, '*'); renderImage(); };
       }
       document.getElementById('downloadBtn').onclick = () => { parent.postMessage({ pluginMessage: { type: 'download-image', nodeId: img.id } }, '*'); };
-      document.getElementById('copyInfoBtn').onclick = () => { copyValue('Layer: ' + img.name + '\\nPositioning: ' + posStr + '\\nSize: ' + curSizeStr + '\\nOriginal Size: ' + origSizeStr + '\\nScale: ' + scaleStr + '\\nEffective PPI: ' + ppiStr, '📋 Copied Layer Info'); };
+      
+      document.getElementById('copyInfoBtn').onclick = () => { copyValue('Layer: ' + img.name + '\\nPositioning: ' + posStr + '\\nCurrent Size: ' + curSizeStr + '\\nOriginal Size: ' + origSizeStr + '\\nScale: ' + scaleStr + '\\nEffective PPI: ' + ppiStr, '📋 Copied Full Layer Info'); };
       document.getElementById('resizeBtn').onclick = () => { parent.postMessage({ pluginMessage: { type: 'resize', targetPpi: parseFloat(document.getElementById('targetPpi').value), nodeId: img.id, origW: img.origW, aspectRatio: img.aspectRatio } }, '*'); };
       updateSize();
     }
@@ -390,6 +400,11 @@
         listTotal = msg.images.length; 
         listContext = "Selection"; 
         
+        // ИСПРАВЛЕНО: Запоминаем массив ID исходно выделенных нод (будь то фрейм, группа или мульти-выделение)
+        if (msg.selectedIds) {
+          initialSelectionIds = msg.selectedIds;
+        }
+
         if (msg.images.length > 1) {
           savedScanImages = msg.images;
           savedScanTotal = msg.images.length;
@@ -409,6 +424,7 @@
         } else {
           currentImages = [];
           currentIndex = 0;
+          initialSelectionIds = [];
           renderEmpty();
         }
       }

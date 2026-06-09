@@ -54,10 +54,11 @@ async function calculateNodeData(node: SceneNode): Promise<any | null> {
         const scaleX = transform ? Math.abs(transform[0][0]) : 1;
         const scaleY = transform ? Math.abs(transform[1][1]) : 1;
         
+        // ИСПРАВЛЕНО: Сначала объявляем размеры ноды, чтобы использовать их в формуле ниже
         const nodeWidth = Math.max(node.width, 1);
         const nodeHeight = Math.max(node.height, 1);
 
-        // Конвертация нормализованных долей смещения в физические пиксели холста (canvas pixels)
+        // Конвертация нормализованных долей смещения в физические пиксели холста
         const t00 = transform ? transform[0][0] : 1;
         const t11 = transform ? transform[1][1] : 1;
         const t02 = transform ? transform[0][2] : 0;
@@ -106,7 +107,11 @@ async function checkSelection() {
     const imagesDataRaw = await Promise.all(imageNodes.map(node => calculateNodeData(node)));
     const imagesData = imagesDataRaw.filter(data => data !== null);
     
-    figma.ui.postMessage({ type: "images-list", images: imagesData });
+    figma.ui.postMessage({ 
+        type: "images-list", 
+        images: imagesData,
+        selectedIds: selection.map(node => node.id)
+    });
 }
 
 figma.on("selectionchange", checkSelection);
@@ -145,6 +150,19 @@ figma.ui.onmessage = async (msg) => {
             }
         } catch (e) {
             console.error("Failed to focus node", e);
+        }
+    }
+    
+    if (msg.type === 'restore-selection' && msg.nodeIds) {
+        try {
+            const nodes = [];
+            for (const id of msg.nodeIds) {
+                const node = await figma.getNodeByIdAsync(id);
+                if (node) nodes.push(node);
+            }
+            figma.currentPage.selection = nodes;
+        } catch (e) {
+            console.error("Failed to restore initial selection", e);
         }
     }
     
