@@ -97,6 +97,15 @@
     .copyable:hover { opacity: 0.6; }
     .copyable:active { opacity: 0.3; }
 
+    /* Стили для раздельного копирования компонентов */
+    .copy-part { cursor: pointer; transition: opacity 0.1s ease; }
+    .copy-part:hover { opacity: 0.6; color: var(--figma-blue); text-decoration: underline; }
+    .copy-part:active { opacity: 0.3; }
+
+    .copy-sep { cursor: pointer; transition: all 0.1s ease; padding: 0 4px; font-weight: 600; color: var(--text-secondary); display: inline-block; }
+    .copy-sep:hover { opacity: 1; color: var(--figma-blue); background-color: rgba(13, 153, 255, 0.1); border-radius: 3px; text-decoration: none; }
+    .copy-sep:active { opacity: 0.5; }
+
     .action-link { font-size: 11px; color: var(--figma-blue); cursor: pointer; font-weight: 500; text-align: right; }
     .action-link:hover { text-decoration: underline; }
 
@@ -129,8 +138,6 @@
 
     let savedScanImages = null;
     let savedScanTotal = 0;
-    
-    // Хранилище ID исходного выделения (фрейм, группа или массив элементов)
     let initialSelectionIds = [];
 
     function escapeHtml(str) {
@@ -253,7 +260,6 @@
       renderImage();
     };
 
-    // ИСПРАВЛЕНО: При клике назад возвращаем изначальное выделение фрейма/группы на холсте Figma
     window.viewList = function() { 
       isReviewMode = false; 
       if (listContext === "Selection" && initialSelectionIds.length > 0) {
@@ -269,9 +275,15 @@
       if (img) {
         const maxW = img.printW * (img.ppi / currentTargetPpi);
         const maxH = img.printH * (img.ppi / currentTargetPpi);
-        const str = `${fmt(maxW)} × ${fmt(maxH)} mm`;
         const el = document.getElementById('maxPrintVal');
-        if (el) { el.textContent = str; el.setAttribute('onclick', `handleCopy(event, '${str}', 'Max Print')`); }
+        if (el) {
+          el.innerHTML = `
+            <span class="copy-part" title="Copy Max Width" onclick="copyValue('${fmt(maxW)}', 'Copied: ${fmt(maxW)}')">${fmt(maxW)}</span>
+            <span class="copy-sep" title="Copy full Max Print" onclick="copyValue('${fmt(maxW)} × ${fmt(maxH)} mm', 'Copied: ${fmt(maxW)} × ${fmt(maxH)} mm')">×</span>
+            <span class="copy-part" title="Copy Max Height" onclick="copyValue('${fmt(maxH)}', 'Copied: ${fmt(maxH)}')">${fmt(maxH)}</span>
+            <span style="color: var(--text-secondary); margin-left: 2px;">mm</span>
+          `;
+        }
       }
     };
 
@@ -289,18 +301,14 @@
 
       let oW = currentUnit === 'mm' ? (img.origW / img.ppi) * 25.4 : img.origW;
       let oH = currentUnit === 'mm' ? (img.origH / img.ppi) * 25.4 : img.origH;
-      const origSizeStr = `${fmt(oW)} × ${fmt(oH)} ${currentUnit}`;
 
       let cW = currentUnit === 'mm' ? (img.curW / 72) * 25.4 : img.curW;
       let cH = currentUnit === 'mm' ? (img.curH / 72) * 25.4 : img.curH;
-      const curSizeStr = `${fmt(cW)} × ${fmt(cH)} ${currentUnit}`;
 
       const scaleStr = `${fmt(img.resScaleX)}% × ${fmt(img.resScaleY)}%`;
       const ppiStr = `${fmt(img.ppi)}`;
-      const printSizeStr = `${fmt(img.printW)} × ${fmt(img.printH)} mm`;
       const maxW = img.printW * (img.ppi / currentTargetPpi);
       const maxH = img.printH * (img.ppi / currentTargetPpi);
-      const maxPrintStr = `${fmt(maxW)} × ${fmt(maxH)} mm`;
 
       let ppiClass = img.ppi < 250 ? 'warning' : (img.ppi < 300 ? 'caution' : 'success');
 
@@ -322,19 +330,58 @@
         <div class="data-content">
           <div class="section-1">
             <div class="layer-row"><span class="label">Layer Name</span><div class="layer-name-container"><span class="layer-name-value copyable" title="Click to copy" onclick="handleCopy(event, '${safeNameJs}', 'Layer Name')">${safeNameHtml}</span><div class="tooltip">${safeNameHtml}</div></div></div>
-            <div class="row"><span class="label">Positioning</span><span class="value copyable" title="Click to copy" onclick="handleCopy(event, '${posStr}', 'Positioning')">${posStr}</span></div>
-            <div class="row"><span class="label">Scale</span><span class="value copyable" title="Click to copy" onclick="handleCopy(event, '${scaleStr}', 'Scale')">${scaleStr}</span></div>
-            <div class="row"><span class="label">Original Size</span><span class="value copyable" title="Click to copy" onclick="handleCopy(event, '${origSizeStr}', 'Original Size')">${origSizeStr}</span></div>
+            
+            <div class="row"><span class="label">Positioning</span>
+              <span class="value">
+                <span style="color: var(--text-secondary); font-weight: 400;">X: </span><span class="copy-part" title="Copy X" onclick="copyValue('${fmt(pX)}', 'Copied: ${fmt(pX)}')">${fmt(pX)}</span>
+                <span class="copy-sep" title="Copy full Positioning" onclick="copyValue('X: ${fmt(pX)} ${currentUnit}, Y: ${fmt(pY)} ${currentUnit}', 'Copied: X: ${fmt(pX)} ${currentUnit}, Y: ${fmt(pY)} ${currentUnit}')">,</span>
+                <span style="color: var(--text-secondary); font-weight: 400; margin-left: 2px;">Y: </span><span class="copy-part" title="Copy Y" onclick="copyValue('${fmt(pY)}', 'Copied: ${fmt(pY)}')">${fmt(pY)}</span>
+                <span style="color: var(--text-secondary); font-weight: 400; margin-left: 2px;">${currentUnit}</span>
+              </span>
+            </div>
+            
+            <div class="row"><span class="label">Scale</span>
+              <span class="value">
+                <span class="copy-part" title="Copy Scale X" onclick="copyValue('${fmt(img.resScaleX)}', 'Copied: ${fmt(img.resScaleX)}')">${fmt(img.resScaleX)}%</span>
+                <span class="copy-sep" title="Copy full Scale" onclick="copyValue('${fmt(img.resScaleX)}% × ${fmt(img.resScaleY)}%', 'Copied: ${fmt(img.resScaleX)}% × ${fmt(img.resScaleY)}%')">×</span>
+                <span class="copy-part" title="Copy Scale Y" onclick="copyValue('${fmt(img.resScaleY)}', 'Copied: ${fmt(img.resScaleY)}')">${fmt(img.resScaleY)}%</span>
+              </span>
+            </div>
+
+            <div class="row"><span class="label">Original Size</span>
+              <span class="value">
+                <span class="copy-part" title="Copy Original Width" onclick="copyValue('${fmt(oW)}', 'Copied: ${fmt(oW)}')">${fmt(oW)}</span>
+                <span class="copy-sep" title="Copy full Original Size" onclick="copyValue('${fmt(oW)} × ${fmt(oH)} ${currentUnit}', 'Copied: ${fmt(oW)} × ${fmt(oH)} ${currentUnit}')">×</span>
+                <span class="copy-part" title="Copy Original Height" onclick="copyValue('${fmt(oH)}', 'Copied: ${fmt(oH)}')">${fmt(oH)}</span>
+                <span style="color: var(--text-secondary); margin-left: 2px;">${currentUnit}</span>
+              </span>
+            </div>
             <div class="row" style="justify-content: flex-end;"><span class="action-link" id="downloadBtn">Download Original Image</span></div>
           </div>
           <div class="section-2">
             <div class="row"><span class="label">Effective PPI</span><span class="value copyable ppi-value ${ppiClass}" title="Click to copy" onclick="handleCopy(event, '${ppiStr}', 'PPI')">${ppiStr}</span></div>
-            <div class="row"><span class="label">Current Size</span><span class="value copyable" title="Click to copy" onclick="handleCopy(event, '${curSizeStr}', 'Current Size')">${curSizeStr}</span></div>
+            
+            <div class="row"><span class="label">Current Size</span>
+              <span class="value">
+                <span class="copy-part" title="Copy Current Width" onclick="copyValue('${fmt(cW)}', 'Copied: ${fmt(cW)}')">${fmt(cW)}</span>
+                <span class="copy-sep" title="Copy full Current Size" onclick="copyValue('${fmt(cW)} × ${fmt(cH)} ${currentUnit}', 'Copied: ${fmt(cW)} × ${fmt(cH)} ${currentUnit}')">×</span>
+                <span class="copy-part" title="Copy Current Height" onclick="copyValue('${fmt(cH)}', 'Copied: ${fmt(cH)}')">${fmt(cH)}</span>
+                <span style="color: var(--text-secondary); margin-left: 2px;">${currentUnit}</span>
+              </span>
+            </div>
             <div class="row" style="justify-content: flex-end;"><span class="action-link" id="copyInfoBtn">Copy Full Info</span></div>
           </div>
           <div class="section-3">
             <div class="row"><span class="label">Target PPI</span><div class="variable_control--inputWrapper--LUhHu"><label class="scrubbable_control--containerBordered---60m8"><span class="transform_panel--inactiveLabel--ffsiD">PPI</span><div style="flex:1; display:flex;"><input type="number" id="targetPpi" class="raw_components--textInput--DZIFa" value="${currentTargetPpi}" oninput="handlePpiInput(this.value)" onfocus="this.select()"></div></label></div></div>
-            <div class="row"><span class="label">Max Print</span><span class="value copyable" id="maxPrintVal" title="Click to copy" onclick="handleCopy(event, '${maxPrintStr}', 'Max Print')">${maxPrintStr}</span></div>
+            
+            <div class="row"><span class="label">Max Print</span>
+              <span class="value" id="maxPrintVal">
+                <span class="copy-part" title="Copy Max Width" onclick="copyValue('${fmt(maxW)}', 'Copied: ${fmt(maxW)}')">${fmt(maxW)}</span>
+                <span class="copy-sep" title="Copy full Max Print" onclick="copyValue('${fmt(maxW)} × ${fmt(maxH)} mm', 'Copied: ${fmt(maxW)} × ${fmt(maxH)} mm')">×</span>
+                <span class="copy-part" title="Copy Max Height" onclick="copyValue('${fmt(maxH)}', 'Copied: ${fmt(maxH)}')">${fmt(maxH)}</span>
+                <span style="color: var(--text-secondary); margin-left: 2px;">mm</span>
+              </span>
+            </div>
             <button id="resizeBtn">Resize to Target PPI</button>
           </div>
         </div>
@@ -354,7 +401,7 @@
       }
       document.getElementById('downloadBtn').onclick = () => { parent.postMessage({ pluginMessage: { type: 'download-image', nodeId: img.id } }, '*'); };
       
-      document.getElementById('copyInfoBtn').onclick = () => { copyValue('Layer: ' + img.name + '\\nPositioning: ' + posStr + '\\nCurrent Size: ' + curSizeStr + '\\nOriginal Size: ' + origSizeStr + '\\nScale: ' + scaleStr + '\\nEffective PPI: ' + ppiStr, '📋 Copied Full Layer Info'); };
+      document.getElementById('copyInfoBtn').onclick = () => { copyValue('Layer: ' + img.name + '\\nPositioning: ' + posStr + '\\nCurrent Size: ' + fmt(cW) + ' × ' + fmt(cH) + ' ' + currentUnit + '\\nOriginal Size: ' + fmt(oW) + ' × ' + fmt(oH) + ' ' + currentUnit + '\\nScale: ' + fmt(img.resScaleX) + '% × ' + fmt(img.resScaleY) + '%\\nEffective PPI: ' + ppiStr, '📋 Copied Full Layer Info'); };
       document.getElementById('resizeBtn').onclick = () => { parent.postMessage({ pluginMessage: { type: 'resize', targetPpi: parseFloat(document.getElementById('targetPpi').value), nodeId: img.id, origW: img.origW, aspectRatio: img.aspectRatio } }, '*'); };
       updateSize();
     }
@@ -400,7 +447,6 @@
         listTotal = msg.images.length; 
         listContext = "Selection"; 
         
-        // ИСПРАВЛЕНО: Запоминаем массив ID исходно выделенных нод (будь то фрейм, группа или мульти-выделение)
         if (msg.selectedIds) {
           initialSelectionIds = msg.selectedIds;
         }
