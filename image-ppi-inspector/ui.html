@@ -131,6 +131,9 @@
 
     button#resizeBtn { background-color: var(--figma-blue); color: white; border: none; border-radius: 6px; height: 32px; width: 100%; margin-top: 4px; font-family: var(--font-stack); font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; }
     button#resizeBtn:hover { background-color: #0087f5; }
+
+    .btn-download-cc { background-color: transparent; border: 1px solid rgba(13, 153, 255, 0.4); color: var(--figma-blue); border-radius: 6px; height: 32px; padding: 0 16px; font-family: var(--font-stack); font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.1s ease; display: flex; align-items: center; justify-content: center; width: 100%; flex-shrink: 0; }
+    .btn-download-cc:hover { background-color: rgba(13, 153, 255, 0.08); border-color: var(--figma-blue); }
   </style>
 </head>
 <body>
@@ -416,9 +419,9 @@
             
             <div class="row"><span class="label">Color Correction</span>${ccIndicatorHtml}</div>
 
-            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-top: 4px;">
-              ${hasCC ? `<span class="action-link" id="downloadCcBtn" title="Download image with color correction">Download with CC</span>` : ``}
-              <span class="action-link" id="downloadBtn" title="Download image without color correction">Download Original</span>
+            <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;">
+              ${hasCC ? `<button class="btn-download-cc" id="downloadCcBtn">Download Image with Corrections</button>` : ``}
+              <button class="btn-secondary" id="downloadBtn">Download Original Image</button>
             </div>
           </div>
           
