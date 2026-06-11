@@ -1,23 +1,25 @@
-figma.showUI(__html__, { width: 300, height: 100 });
+// Инициализация UI
+figma.showUI(__html__, { width: 300, height: 500, themeColors: true });
 
-// Ускоряем поиск: пропускаем скрытые слои внутри инстансов
 figma.skipInvisibleInstanceChildren = true; 
 
-// Увеличиваем паузу до 15мс, чтобы интерфейс успевал перерисовать ползунок
 const yieldToUI = () => new Promise(resolve => setTimeout(resolve, 15));
+
+let cancelScanRequested = false;
+
+function clone(val: any): any {
+    return JSON.parse(JSON.stringify(val));
+}
 
 function findAllImageNodes(nodes: readonly SceneNode[]): SceneNode[] {
     let imageNodes: SceneNode[] = [];
-    
     for (const node of nodes) {
         if (!node.visible) continue;
-        
         if ('fills' in node && node.fills !== figma.mixed && Array.isArray(node.fills)) {
             if (node.fills.some(fill => fill.type === 'IMAGE' && fill.imageHash)) {
                 imageNodes.push(node);
             }
         }
-        
         if ('findAll' in node) {
             const children = node.findAll(child => {
                 return child.visible && 
@@ -29,6 +31,30 @@ function findAllImageNodes(nodes: readonly SceneNode[]): SceneNode[] {
             imageNodes = imageNodes.concat(children as SceneNode[]);
         }
     }
+    return imageNodes;
+}
+
+async function findAllImageNodesAsync(nodes: readonly BaseNode[]): Promise<SceneNode[]> {
+    let imageNodes: SceneNode[] = [];
+    let counter = 0; 
+    async function traverse(currentNodes: readonly BaseNode[]) {
+        for (const node of currentNodes) {
+            if (cancelScanRequested) return;
+            if ('visible' in node && !node.visible) continue;
+            
+            if ('fills' in node && node.fills !== figma.mixed && Array.isArray(node.fills)) {
+                if (node.fills.some(fill => fill.type === 'IMAGE' && fill.imageHash)) {
+                    imageNodes.push(node as SceneNode);
+                }
+            }
+            if ('children' in node) {
+                await traverse((node as any).children);
+            }
+            counter++;
+            if (counter % 300 === 0) await yieldToUI(); 
+        }
+    }
+    await traverse(nodes);
     return imageNodes;
 }
 
@@ -57,7 +83,6 @@ async function calculateNodeData(node: SceneNode): Promise<any | null> {
         const nodeWidth = Math.max(node.width, 1);
         const nodeHeight = Math.max(node.height, 1);
 
-        // Конвертация нормализованных долей смещения в физические пиксели холста (canvas pixels)
         const t00 = transform ? transform[0][0] : 1;
         const t11 = transform ? transform[1][1] : 1;
         const t02 = transform ? transform[0][2] : 0;
@@ -68,7 +93,23 @@ async function calculateNodeData(node: SceneNode): Promise<any | null> {
 
         const ppiX = size.width / (nodeWidth / scaleX / 72);
         const ppiY = size.height / (nodeHeight / scaleY / 72);
-        const stablePPI = (ppiX + ppiY) / 2;
+        const stablePPI = Math.round((ppiX + ppiY) / 2);
+
+        let hasCC = false;
+        if (fill.filters) {
+            const f = fill.filters;
+            if (
+                Math.abs(f.exposure || 0) > 0.001 || 
+                Math.abs(f.contrast || 0) > 0.001 || 
+                Math.abs(f.saturation || 0) > 0.001 || 
+                Math.abs(f.temperature || 0) > 0.001 || 
+                Math.abs(f.tint || 0) > 0.001 || 
+                Math.abs(f.highlights || 0) > 0.001 || 
+                Math.abs(f.shadows || 0) > 0.001
+            ) {
+                hasCC = true;
+            }
+        }
         
         return {
             id: node.id,
@@ -84,9 +125,8 @@ async function calculateNodeData(node: SceneNode): Promise<any | null> {
             origH: size.height,
             printW: (nodeWidth / 72) * 25.4,
             printH: (nodeHeight / 72) * 25.4,
-            maxW: (size.width / 300) * 25.4,
-            maxH: (size.height / 300) * 25.4,
-            aspectRatio: nodeHeight / nodeWidth
+            aspectRatio: nodeHeight / nodeWidth,
+            hasCC: hasCC
         };
     } catch (err) {
         console.error(`Error processing node ${node.id}`, err);
@@ -106,7 +146,11 @@ async function checkSelection() {
     const imagesDataRaw = await Promise.all(imageNodes.map(node => calculateNodeData(node)));
     const imagesData = imagesDataRaw.filter(data => data !== null);
     
-    figma.ui.postMessage({ type: "images-list", images: imagesData });
+    figma.ui.postMessage({ 
+        type: "images-list", 
+        images: imagesData,
+        selectedIds: selection.map(node => node.id)
+    });
 }
 
 figma.on("selectionchange", checkSelection);
@@ -148,25 +192,57 @@ figma.ui.onmessage = async (msg) => {
         }
     }
     
-    if (msg.type === 'scan-page') {
+    if (msg.type === 'restore-selection' && msg.nodeIds) {
+        try {
+            const nodes = [];
+            for (const id of msg.nodeIds) {
+                const node = await figma.getNodeByIdAsync(id);
+                if (node) nodes.push(node);
+            }
+            figma.currentPage.selection = nodes;
+        } catch (e) {
+            console.error("Failed to restore initial selection", e);
+        }
+    }
+
+    if (msg.type === 'cancel-scan') {
+        cancelScanRequested = true;
+    }
+    
+    if (msg.type === 'scan') {
+        cancelScanRequested = false;
         await yieldToUI();
 
-        const allImageNodes = findAllImageNodes(figma.currentPage.children);
-        const total = allImageNodes.length;
-
-        if (total === 0) {
-            figma.ui.postMessage({ type: "scan-results", images: [], total: 0 });
+        let nodesToScan = msg.scope === 'project' ? figma.root.children : figma.currentPage.children;
+        const allImageNodes = await findAllImageNodesAsync(nodesToScan);
+        
+        if (cancelScanRequested) {
+            figma.ui.postMessage({ type: "scan-cancelled" });
             return;
         }
 
-        const results = [];
-        
+        const total = allImageNodes.length;
+
+        if (total === 0) {
+            figma.ui.postMessage({ type: "scan-results", images: [], ccImages: msg.includeCC ? [] : null, total: 0 });
+            return;
+        }
+
+        const resultsPPI = [];
+        const resultsCC = [];
+
         for (let i = 0; i < total; i++) {
+            if (cancelScanRequested) {
+                figma.ui.postMessage({ type: "scan-cancelled" });
+                return;
+            }
+
             const node = allImageNodes[i];
             const data = await calculateNodeData(node);
             
-            if (data && data.ppi < 250) {
-                results.push(data);
+            if (data) {
+                if (data.ppi < 250) resultsPPI.push(data);
+                if (msg.includeCC && data.hasCC) resultsCC.push(data);
             }
 
             if (i % 2 === 0 || i === total - 1) {
@@ -175,8 +251,18 @@ figma.ui.onmessage = async (msg) => {
             }
         }
 
-        results.sort((a, b) => a.ppi - b.ppi);
-        figma.ui.postMessage({ type: "scan-results", images: results, total: total });
+        if (cancelScanRequested) {
+            figma.ui.postMessage({ type: "scan-cancelled" });
+            return;
+        }
+
+        resultsPPI.sort((a, b) => a.ppi - b.ppi);
+        figma.ui.postMessage({ 
+            type: "scan-results", 
+            images: resultsPPI, 
+            ccImages: msg.includeCC ? resultsCC : null,
+            total: total 
+        });
     }
     
     if (msg.type === 'resize' && msg.nodeId) {
@@ -215,7 +301,61 @@ figma.ui.onmessage = async (msg) => {
             
         } catch (err: any) {
             figma.notify("❌ " + err.message);
-            figma.ui.postMessage({ type: 'download-error' });
+        }
+    }
+
+    if (msg.type === 'download-image-cc' && msg.nodeId) {
+        try {
+            const node = await figma.getNodeByIdAsync(msg.nodeId) as SceneNode;
+            if (!node) throw new Error("Layer not found.");
+
+            if (!('fills' in node) || node.fills === figma.mixed || !Array.isArray(node.fills)) {
+                throw new Error("No valid fills found.");
+            }
+            
+            const originalFill = node.fills.find(f => f.type === 'IMAGE');
+            if (!originalFill || !originalFill.imageHash) throw new Error("No image fill.");
+            
+            const image = figma.getImageByHash(originalFill.imageHash);
+            if (!image) throw new Error("No image.");
+
+            const size = await image.getSizeAsync();
+            
+            // Временная нода для рендера
+            const tempRect = figma.createRectangle();
+            tempRect.name = "Export_Temp";
+            tempRect.resize(size.width, size.height);
+            tempRect.x = node.x - 20000;
+            tempRect.y = node.y;
+            
+            const newFill = clone(originalFill);
+            newFill.scaleMode = 'FILL';
+            delete newFill.imageTransform;
+            
+            tempRect.fills = [newFill];
+
+            if (node.parent) {
+                node.parent.insertChild(0, tempRect);
+            } else {
+                figma.currentPage.appendChild(tempRect);
+            }
+
+            const exportScale = size.width / tempRect.width;
+
+            // Подставляем формат ресамплинга "BASIC", который эквивалентен отключению интерполяции
+            const exportSettings: any = { 
+                format: 'PNG',
+                constraint: { type: 'SCALE', value: exportScale },
+                imageResampling: 'BASIC'
+            };
+
+            const bytes = await tempRect.exportAsync(exportSettings);
+            
+            tempRect.remove(); 
+            
+            figma.ui.postMessage({ type: 'download-file', bytes: bytes, name: node.name + "_CC" });
+        } catch (err: any) {
+            figma.notify("Error downloading CC image: " + err.message);
         }
     }
 };

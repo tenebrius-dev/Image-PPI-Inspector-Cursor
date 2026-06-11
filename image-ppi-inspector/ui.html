@@ -76,11 +76,12 @@
     .label { font-size: 11px; font-weight: 400; color: var(--text-secondary); letter-spacing: -0.01em; flex-shrink: 0; }
     
     .layer-name-container { flex: 1; min-width: 0; position: relative; display: flex; justify-content: flex-end; height: 16px; }
-    .layer-name-value { font-size: 11px; font-weight: 500; color: var(--text-primary); letter-spacing: -0.01em; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; width: 100%; line-height: 16px; }
+    .layer-name-value { font-size: 11px; font-weight: 500; color: var(--text-primary); letter-spacing: -0.01em; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; max-width: 100%; line-height: 16px; }
 
     .tooltip {
-      visibility: hidden; opacity: 0; position: absolute; top: -5px; right: -9px; background-color: #f5f5f5; border: 1px solid #d1d1d1;
-      color: var(--text-primary); padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; line-height: 16px; 
+      visibility: hidden; opacity: 0; position: absolute; top: -5px; right: -9px; 
+      background-color: #e7f5ff; border: 1px solid rgba(13, 153, 255, 0.15); color: var(--figma-blue); 
+      padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; line-height: 16px; 
       white-space: normal; word-break: break-all; z-index: 100; width: calc(100% + 2px); min-width: 120px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.08); transition: opacity 0.1s; pointer-events: none; text-align: right;
     }
@@ -93,12 +94,30 @@
     .success { color: #14a594; }
     .ppi-value { font-weight: 600 !important; }
 
-    .copyable { cursor: pointer; transition: opacity 0.1s ease; }
-    .copyable:hover { opacity: 0.6; }
+    .copyable { cursor: pointer; transition: all 0.1s ease; }
     .copyable:active { opacity: 0.3; }
+
+    .layer-name-value.copyable { padding: 0 4px; margin-right: -4px; border-radius: 3px; box-sizing: border-box; }
+    .layer-name-value.copyable:hover { opacity: 1; color: var(--figma-blue); background-color: rgba(13, 153, 255, 0.1); }
+
+    .ppi-value.copyable { padding: 0 4px; margin-right: -4px; border-radius: 3px; }
+    .ppi-value.copyable:hover { opacity: 1; background-color: rgba(0, 0, 0, 0.06); }
+
+    .copy-part { cursor: pointer; transition: all 0.1s ease; padding: 0 2px; border-radius: 2px; display: inline-block; }
+    .copy-part:hover { opacity: 1; color: var(--figma-blue); background-color: rgba(13, 153, 255, 0.1); text-decoration: none; }
+    .copy-part:active { opacity: 0.5; }
+
+    .copy-sep { cursor: pointer; transition: all 0.1s ease; padding: 0 2px; font-weight: 600; color: var(--text-secondary); display: inline-block; border-radius: 2px; }
+    .copy-sep:hover { opacity: 1; color: var(--figma-blue); background-color: rgba(13, 153, 255, 0.1); text-decoration: none; }
+    .copy-sep:active { opacity: 0.5; }
 
     .action-link { font-size: 11px; color: var(--figma-blue); cursor: pointer; font-weight: 500; text-align: right; }
     .action-link:hover { text-decoration: underline; }
+
+    .tabs { display: flex; border-bottom: 1px solid #e6e6e6; background: #f9f9f9; padding: 0; flex-shrink: 0; }
+    .tab { flex: 1; text-align: center; padding: 8px 0; font-size: 11px; font-weight: 500; cursor: pointer; color: var(--text-secondary); border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 0.1s; }
+    .tab.active { color: var(--text-primary); border-bottom-color: var(--figma-blue); }
+    .tab:hover:not(.active) { color: var(--text-primary); }
 
     .variable_control--inputWrapper--LUhHu { display: flex; width: 85px; flex-shrink: 0; }
     .scrubbable_control--containerBordered---60m8 { display: flex; align-items: center; width: 100%; height: 24px; padding: 0 8px; background-color: var(--bg-input); border-radius: 4px; border: 1px solid transparent; box-sizing: border-box; transition: all 0.1s; }
@@ -124,12 +143,14 @@
     let listTotal = 0;
     let isReviewMode = false;
     let currentTargetPpi = 300;
+    let currentTab = 'ppi';
     
-    // Глобальное состояние единиц измерения
     let currentUnit = 'px';
 
     let savedScanImages = null;
+    let savedScanCCImages = null;
     let savedScanTotal = 0;
+    let initialSelectionIds = [];
 
     function escapeHtml(str) {
       if (!str) return "";
@@ -151,13 +172,18 @@
       return parseFloat(Number(val).toFixed(2)).toString().replace('.', ',');
     }
 
-    function updateSize() {
-      requestAnimationFrame(() => {
+    function updateSize(immediate = false) {
+      const resize = () => {
         const container = document.getElementById('app');
         let height = container.scrollHeight;
-        if (height > 500) height = 500; 
+        if (height > 550) height = 550; 
         parent.postMessage({ pluginMessage: { type: 'resize-window', width: 300, height: height } }, '*');
-      });
+      };
+      if (immediate) {
+        resize();
+      } else {
+        requestAnimationFrame(resize);
+      }
     }
 
     function copyValue(value, toastMsg) {
@@ -172,7 +198,6 @@
       e.stopPropagation(); copyValue(value, `Copied: ${value}`);
     };
     
-    // Функция переключения единиц измерения
     window.toggleUnit = function() {
       currentUnit = currentUnit === 'px' ? 'mm' : 'px';
       if (currentImages.length > 0 && currentIndex >= 0) {
@@ -182,12 +207,24 @@
 
     window.clearScan = function() {
       savedScanImages = null;
+      savedScanCCImages = null;
       savedScanTotal = 0;
       currentImages = [];
       currentIndex = 0;
       listContext = "";
       isReviewMode = false;
+      initialSelectionIds = [];
       renderEmpty();
+    };
+
+    window.updateScanButton = function() {
+      const ccChecked = document.getElementById('scan-cc').checked;
+      const btn = document.getElementById('scan-btn');
+      if (ccChecked) {
+          btn.textContent = `Scan Page (PPI & CC)`;
+      } else {
+          btn.textContent = `Scan Page for Low PPI`;
+      }
     };
 
     function renderEmpty() {
@@ -195,13 +232,20 @@
       app.innerHTML = `
         <div class="empty-state">
           <div class="empty-state-content"><div>Select an image to inspect...</div></div>
-          <button class="btn-secondary" onclick="startScan()">Scan Page for Low PPI</button>
+          <div style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
+            <label style="font-size: 11px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; user-select: none; margin-bottom: 8px;">
+                <input type="checkbox" id="scan-cc" style="margin:0;" onchange="updateScanButton()"> Color Correction Check to Page Scan
+            </label>
+            <button class="btn-secondary" id="scan-btn" onclick="startScan()">Scan Page for Low PPI</button>
+          </div>
         </div>
       `;
       updateSize();
     }
 
     window.startScan = function() {
+      const ccChecked = document.getElementById('scan-cc').checked;
+
       const app = document.getElementById('app');
       app.innerHTML = `
         <div class="empty-state">
@@ -210,26 +254,67 @@
             <div class="progress-container"><div class="progress-bar" id="pb"></div></div>
             <div style="font-size: 10px; margin-top: 4px;" id="scan-count">0 / 0</div>
           </div>
+          <button class="btn-secondary" style="margin-top: 3px;" onclick="cancelScan()">Cancel Scan</button>
         </div>
       `;
       updateSize();
-      parent.postMessage({ pluginMessage: { type: 'scan-page' } }, '*');
+      parent.postMessage({ pluginMessage: { type: 'scan', scope: 'page', includeCC: ccChecked } }, '*');
     }
+
+    window.cancelScan = function() {
+      const status = document.getElementById('scan-status');
+      if (status) status.textContent = "Cancelling...";
+      parent.postMessage({ pluginMessage: { type: 'cancel-scan' } }, '*');
+    }
+
+    window.switchTab = function(tab) {
+      currentTab = tab;
+      currentImages = tab === 'ppi' ? savedScanImages : savedScanCCImages;
+      renderList();
+    };
 
     function renderList() {
       const app = document.getElementById('app');
-      if (currentImages.length === 0) {
-        app.innerHTML = `<div class="empty-state"><div class="empty-state-content"><div class="success" style="font-size: 14px; font-weight: 600;">✅ All clear!</div><div style="margin-top: 4px;">Scanned ${listTotal} images.<br>No low PPI issues found.</div></div><button class="btn-secondary" onclick="clearScan()">Back</button></div>`;
+      
+      let isAllClear = false;
+      if (listContext === 'Scan' && savedScanImages !== null) {
+          if (savedScanImages.length === 0 && (!savedScanCCImages || savedScanCCImages.length === 0)) isAllClear = true;
+      } else if (currentImages.length === 0) {
+          isAllClear = true;
+      }
+
+      if (isAllClear) {
+        app.innerHTML = `<div class="empty-state"><div class="empty-state-content"><div class="success" style="font-size: 14px; font-weight: 600;">✅ All clear!</div><div style="margin-top: 4px;">Scanned ${listTotal} images.<br>No issues found.</div></div><button class="btn-secondary" onclick="clearScan()">Back</button></div>`;
         updateSize(); return;
       }
-      
-      const listHtml = currentImages.map(img => {
-        let ppiClass = img.ppi < 250 ? 'warning' : (img.ppi < 300 ? 'caution' : 'success');
-        let safeName = escapeHtml(img.name);
-        return `<div class="scan-item" onclick="enterReviewMode('${img.id}')"><div class="scan-item-name" title="${safeName}">${safeName}</div><div class="scan-item-ppi ${ppiClass}">${fmt(img.ppi)} PPI</div></div>`;
-      }).join('');
 
-      let title = listContext === "Scan" ? `${currentImages.length} issues found` : `${currentImages.length} images in selected frame`;
+      let tabsHtml = '';
+      if (listContext === "Scan" && savedScanCCImages !== null) {
+          tabsHtml = `
+          <div class="tabs">
+              <div class="tab ${currentTab === 'ppi' ? 'active' : ''}" onclick="switchTab('ppi')">Low PPI (${savedScanImages.length})</div>
+              <div class="tab ${currentTab === 'cc' ? 'active' : ''}" onclick="switchTab('cc')">Color Correction (${savedScanCCImages.length})</div>
+          </div>`;
+      }
+
+      let listContent = '';
+      if (currentImages.length === 0) {
+          listContent = `<div style="padding: 24px; text-align: center; color: var(--text-secondary); font-size: 11px;">No images in this category.</div>`;
+      } else {
+          listContent = currentImages.map(img => {
+            let rightSide = '';
+            if (currentTab === 'cc') {
+               rightSide = `<div class="scan-item-ppi"><span style="background: rgba(13, 153, 255, 0.1); color: var(--figma-blue); padding: 2px 6px; border-radius: 4px; font-weight: 600;">CC</span></div>`;
+            } else {
+               let ppiClass = img.ppi < 250 ? 'warning' : (img.ppi < 300 ? 'caution' : 'success');
+               rightSide = `<div class="scan-item-ppi ${ppiClass}">${fmt(img.ppi)} PPI</div>`;
+            }
+            let safeName = escapeHtml(img.name);
+            return `<div class="scan-item" onclick="enterReviewMode('${img.id}')"><div class="scan-item-name" title="${safeName}">${safeName}</div>${rightSide}</div>`;
+          }).join('');
+      }
+
+      let title = listContext === "Scan" ? `${currentImages.length} issues found` : `${currentImages.length} images selected`;
       let subtitle = listContext === "Scan" ? `<span class="counter">(out of ${listTotal})</span>` : '';
       let leftAction = listContext === "Scan" ? `<button class="nav-btn" onclick="clearScan()" style="font-size: 11px; padding-left: 0;">Clear</button>` : ``;
 
@@ -239,7 +324,8 @@
           <div style="display: flex; align-items: center; justify-content: center; gap: 4px;"><span class="counter" style="font-weight: 500; color: var(--text-primary);">${title}</span>${subtitle}</div>
           <div></div>
         </div>
-        <div class="scan-list">${listHtml}</div>
+        ${tabsHtml}
+        <div class="scan-list">${listContent}</div>
       `;
       updateSize();
     }
@@ -251,7 +337,13 @@
       renderImage();
     };
 
-    window.viewList = function() { isReviewMode = false; renderList(); };
+    window.viewList = function() { 
+      isReviewMode = false; 
+      if (listContext === "Selection" && initialSelectionIds.length > 0) {
+        parent.postMessage({ pluginMessage: { type: 'restore-selection', nodeIds: initialSelectionIds } }, '*');
+      }
+      renderList(); 
+    };
 
     window.handlePpiInput = function(val) {
       let ppi = parseFloat(val); if (isNaN(ppi) || ppi <= 0) return;
@@ -260,9 +352,10 @@
       if (img) {
         const maxW = img.printW * (img.ppi / currentTargetPpi);
         const maxH = img.printH * (img.ppi / currentTargetPpi);
-        const str = `${fmt(maxW)} × ${fmt(maxH)} mm`;
         const el = document.getElementById('maxPrintVal');
-        if (el) { el.textContent = str; el.setAttribute('onclick', `handleCopy(event, '${str}', 'Max Print')`); }
+        if (el) {
+          el.innerHTML = `<span class="copy-part" title="Copy Max Width" onclick="copyValue('${fmt(maxW)}', 'Copied: ${fmt(maxW)}')">${fmt(maxW)}</span><span class="copy-sep" title="Copy full Max Print" onclick="copyValue('${fmt(maxW)} × ${fmt(maxH)} mm', 'Copied: ${fmt(maxW)} × ${fmt(maxH)} mm')">×</span><span class="copy-part" title="Copy Max Height" onclick="copyValue('${fmt(maxH)}', 'Copied: ${fmt(maxH)}')">${fmt(maxH)}</span> <span style="color: var(--text-secondary);">mm</span>`;
+        }
       }
     };
 
@@ -278,23 +371,23 @@
       let pY = currentUnit === 'mm' ? (img.posY / 72) * 25.4 : img.posY;
       const posStr = `X: ${fmt(pX)} ${currentUnit}, Y: ${fmt(pY)} ${currentUnit}`;
 
-      // ИСПРАВЛЕНА формула для конвертации оригинального размера по эффективному PPI
       let oW = currentUnit === 'mm' ? (img.origW / img.ppi) * 25.4 : img.origW;
       let oH = currentUnit === 'mm' ? (img.origH / img.ppi) * 25.4 : img.origH;
-      const origSizeStr = `${fmt(oW)} × ${fmt(oH)} ${currentUnit}`;
 
       let cW = currentUnit === 'mm' ? (img.curW / 72) * 25.4 : img.curW;
       let cH = currentUnit === 'mm' ? (img.curH / 72) * 25.4 : img.curH;
-      const curSizeStr = `${fmt(cW)} × ${fmt(cH)} ${currentUnit}`;
 
       const scaleStr = `${fmt(img.resScaleX)}% × ${fmt(img.resScaleY)}%`;
       const ppiStr = `${fmt(img.ppi)}`;
-      const printSizeStr = `${fmt(img.printW)} × ${fmt(img.printH)} mm`;
       const maxW = img.printW * (img.ppi / currentTargetPpi);
       const maxH = img.printH * (img.ppi / currentTargetPpi);
-      const maxPrintStr = `${fmt(maxW)} × ${fmt(maxH)} mm`;
 
       let ppiClass = img.ppi < 250 ? 'warning' : (img.ppi < 300 ? 'caution' : 'success');
+
+      const hasCC = Boolean(img.hasCC);
+      const ccIndicatorHtml = hasCC 
+        ? `<span class="value" style="color: var(--figma-blue); font-weight: 600;">Applied</span>` 
+        : `<span class="value" style="color: var(--text-secondary); font-weight: 500;">None</span>`;
 
       let toolbarHtml = `
         <div class="toolbar" style="display: grid; grid-template-columns: 1fr auto 1fr;">
@@ -305,7 +398,7 @@
             ${currentImages.length > 1 ? `<button class="nav-btn" id="prevBtn" ${currentIndex === 0 ? 'disabled' : ''}>&larr;</button><span class="counter">Image ${currentIndex + 1} of ${currentImages.length}</span><button class="nav-btn" id="nextBtn" ${currentIndex === currentImages.length - 1 ? 'disabled' : ''}>&rarr;</button>` : ``}
           </div>
           <div style="display: flex; align-items: center; justify-content: flex-end;">
-            <button class="nav-btn" onclick="toggleUnit()" style="font-size: 11px; padding-right: 0;" title="Toggle between Pixels and Millimeters">Unit: ${currentUnit.toUpperCase()}</button>
+            <button class="nav-btn" onclick="toggleUnit()" style="font-size: 11px; padding-right: 0;" title="Toggle between Pixels and Millimeters">Unit: ${currentUnit.toLowerCase()}</button>
           </div>
         </div>`;
 
@@ -314,20 +407,45 @@
         <div class="data-content">
           <div class="section-1">
             <div class="layer-row"><span class="label">Layer Name</span><div class="layer-name-container"><span class="layer-name-value copyable" title="Click to copy" onclick="handleCopy(event, '${safeNameJs}', 'Layer Name')">${safeNameHtml}</span><div class="tooltip">${safeNameHtml}</div></div></div>
-            <div class="row"><span class="label">Positioning</span><span class="value copyable" title="Click to copy" onclick="handleCopy(event, '${posStr}', 'Positioning')">${posStr}</span></div>
-            <div class="row"><span class="label">Scale</span><span class="value copyable" title="Click to copy" onclick="handleCopy(event, '${scaleStr}', 'Scale')">${scaleStr}</span></div>
-            <div class="row"><span class="label">Current Size</span><span class="value copyable" title="Click to copy" onclick="handleCopy(event, '${curSizeStr}', 'Current Size')">${curSizeStr}</span></div>
-            <div class="row"><span class="label">Original Size</span><span class="value copyable" title="Click to copy" onclick="handleCopy(event, '${origSizeStr}', 'Original Size')">${origSizeStr}</span></div>
-            <div class="row" style="justify-content: flex-end;"><span class="action-link" id="downloadBtn">Download Original</span></div>
-          </div>
-          <div class="section-2">
+            
             <div class="row"><span class="label">Effective PPI</span><span class="value copyable ppi-value ${ppiClass}" title="Click to copy" onclick="handleCopy(event, '${ppiStr}', 'PPI')">${ppiStr}</span></div>
-            <div class="row"><span class="label">Size (W × H)</span><span class="value copyable" title="Click to copy" onclick="handleCopy(event, '${printSizeStr}', 'Print Size')">${printSizeStr}</span></div>
-            <div class="row" style="justify-content: flex-end;"><span class="action-link" id="copyInfoBtn">Copy Info</span></div>
+            
+            <div class="row"><span class="label">Current Size</span>
+              <span class="value"><span class="copy-part" title="Copy Current Width" onclick="copyValue('${fmt(cW)}', 'Copied: ${fmt(cW)}')">${fmt(cW)}</span><span class="copy-sep" title="Copy full Current Size" onclick="copyValue('${fmt(cW)} × ${fmt(cH)} ${currentUnit}', 'Copied: ${fmt(cW)} × ${fmt(cH)} ${currentUnit}')">×</span><span class="copy-part" title="Copy Current Height" onclick="copyValue('${fmt(cH)}', 'Copied: ${fmt(cH)}')">${fmt(cH)}</span> <span style="color: var(--text-secondary);">${currentUnit}</span></span>
+            </div>
+            
+            <div class="row"><span class="label">Color Correction</span>${ccIndicatorHtml}</div>
+
+            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-top: 4px;">
+              ${hasCC ? `<span class="action-link" id="downloadCcBtn" title="Download image with color correction">Download with CC</span>` : ``}
+              <span class="action-link" id="downloadBtn" title="Download image without color correction">Download Original</span>
+            </div>
           </div>
+          
+          <div class="section-2">
+            <div class="row"><span class="label">Original Size</span>
+              <span class="value"><span class="copy-part" title="Copy Original Width" onclick="copyValue('${fmt(oW)}', 'Copied: ${fmt(oW)}')">${fmt(oW)}</span><span class="copy-sep" title="Copy full Original Size" onclick="copyValue('${fmt(oW)} × ${fmt(oH)} ${currentUnit}', 'Copied: ${fmt(oW)} × ${fmt(oH)} ${currentUnit}')">×</span><span class="copy-part" title="Copy Original Height" onclick="copyValue('${fmt(oH)}', 'Copied: ${fmt(oH)}')">${fmt(oH)}</span> <span style="color: var(--text-secondary);">${currentUnit}</span></span>
+            </div>
+
+            <div class="row"><span class="label">Crop Positioning</span>
+              <span class="value"><span style="color: var(--text-secondary); font-weight: 400;">X:</span> <span class="copy-part" title="Copy X" onclick="copyValue('${fmt(pX)}', 'Copied: ${fmt(pX)}')">${fmt(pX)}</span><span class="copy-sep" title="Copy full Crop Positioning" onclick="copyValue('X: ${fmt(pX)} ${currentUnit}, Y: ${fmt(pY)} ${currentUnit}', 'Copied: X: ${fmt(pX)} ${currentUnit}, Y: ${fmt(pY)} ${currentUnit}')">,</span> <span style="color: var(--text-secondary); font-weight: 400;">Y:</span> <span class="copy-part" title="Copy Y" onclick="copyValue('${fmt(pY)}', 'Copied: ${fmt(pY)}')">${fmt(pY)}</span> <span style="color: var(--text-secondary); font-weight: 400;">${currentUnit}</span></span>
+            </div>
+            
+            <div class="row"><span class="label">Scale</span>
+              <span class="value"><span class="copy-part" title="Copy Scale X" onclick="copyValue('${fmt(img.resScaleX)}', 'Copied: ${fmt(img.resScaleX)}')">${fmt(img.resScaleX)}%</span><span class="copy-sep" title="Copy full Scale" onclick="copyValue('${fmt(img.resScaleX)}% × ${fmt(img.resScaleY)}%', 'Copied: ${fmt(img.resScaleX)}% × ${fmt(img.resScaleY)}%')">×</span><span class="copy-part" title="Copy Scale Y" onclick="copyValue('${fmt(img.resScaleY)}', 'Copied: ${fmt(img.resScaleY)}')">${fmt(img.resScaleY)}%</span></span>
+            </div>
+
+            <div class="row" style="justify-content: flex-end; margin-top: 4px;">
+              <span class="action-link" id="copyInfoBtn">Copy Full Info</span>
+            </div>
+          </div>
+          
           <div class="section-3">
             <div class="row"><span class="label">Target PPI</span><div class="variable_control--inputWrapper--LUhHu"><label class="scrubbable_control--containerBordered---60m8"><span class="transform_panel--inactiveLabel--ffsiD">PPI</span><div style="flex:1; display:flex;"><input type="number" id="targetPpi" class="raw_components--textInput--DZIFa" value="${currentTargetPpi}" oninput="handlePpiInput(this.value)" onfocus="this.select()"></div></label></div></div>
-            <div class="row"><span class="label">Max Print</span><span class="value copyable" id="maxPrintVal" title="Click to copy" onclick="handleCopy(event, '${maxPrintStr}', 'Max Print')">${maxPrintStr}</span></div>
+            
+            <div class="row"><span class="label">Max Print</span>
+              <span class="value" id="maxPrintVal"><span class="copy-part" title="Copy Max Width" onclick="copyValue('${fmt(maxW)}', 'Copied: ${fmt(maxW)}')">${fmt(maxW)}</span><span class="copy-sep" title="Copy full Max Print" onclick="copyValue('${fmt(maxW)} × ${fmt(maxH)} mm', 'Copied: ${fmt(maxW)} × ${fmt(maxH)} mm')">×</span><span class="copy-part" title="Copy Max Height" onclick="copyValue('${fmt(maxH)}', 'Copied: ${fmt(maxH)}')">${fmt(maxH)}</span> <span style="color: var(--text-secondary);">mm</span></span>
+            </div>
             <button id="resizeBtn">Resize to Target PPI</button>
           </div>
         </div>
@@ -345,16 +463,41 @@
         document.getElementById('prevBtn').onclick = () => { currentIndex--; if (isReviewMode) parent.postMessage({ pluginMessage: { type: 'focus-node', nodeId: currentImages[currentIndex].id } }, '*'); renderImage(); };
         document.getElementById('nextBtn').onclick = () => { currentIndex++; if (isReviewMode) parent.postMessage({ pluginMessage: { type: 'focus-node', nodeId: currentImages[currentIndex].id } }, '*'); renderImage(); };
       }
+      
       document.getElementById('downloadBtn').onclick = () => { parent.postMessage({ pluginMessage: { type: 'download-image', nodeId: img.id } }, '*'); };
-      document.getElementById('copyInfoBtn').onclick = () => { copyValue(`Layer: ${img.name}\nPositioning: ${posStr}\nSize: ${curSizeStr}\nOriginal Size: ${origSizeStr}\nScale: ${scaleStr}\nEffective PPI: ${ppiStr}`, '📋 Copied Layer Info'); };
+      
+      if (hasCC) {
+        document.getElementById('downloadCcBtn').onclick = () => { parent.postMessage({ pluginMessage: { type: 'download-image-cc', nodeId: img.id } }, '*'); };
+      }
+
+      document.getElementById('copyInfoBtn').onclick = () => { 
+        const info = `Layer Name: ${img.name}\nEffective PPI: ${ppiStr}\nCurrent Size: ${fmt(cW)} × ${fmt(cH)} ${currentUnit}\nOriginal Size: ${fmt(oW)} × ${fmt(oH)} ${currentUnit}\nCrop Positioning: ${posStr}\nScale: ${fmt(img.resScaleX)}% × ${fmt(img.resScaleY)}%`;
+        copyValue(info, '📋 Copied Full Layer Info'); 
+      };
+      
       document.getElementById('resizeBtn').onclick = () => { parent.postMessage({ pluginMessage: { type: 'resize', targetPpi: parseFloat(document.getElementById('targetPpi').value), nodeId: img.id, origW: img.origW, aspectRatio: img.aspectRatio } }, '*'); };
-      updateSize();
+      updateSize(true);
     }
 
     window.onmessage = (event) => {
       const msg = event.data.pluginMessage;
       
       if (msg.type === "images-list") {
+        if (isReviewMode && msg.images.length === 1 && currentImages.length > 0) {
+            const selectedId = msg.images[0].id;
+            const idx = currentImages.findIndex(img => img.id === selectedId);
+            if (idx !== -1) {
+                // Check if the data actually changed. If not, avoid re-rendering to prevent DOM flicker.
+                const oldData = JSON.stringify(currentImages[idx]);
+                const newData = JSON.stringify(msg.images[0]);
+                if (oldData !== newData) {
+                    currentImages[idx] = msg.images[0];
+                    renderImage();
+                }
+                return;
+            }
+        }
+
         if (savedScanImages !== null) {
             msg.images.forEach(incomingImg => {
                 const sIdx = savedScanImages.findIndex(savedImg => savedImg.id === incomingImg.id);
@@ -364,16 +507,29 @@
 
         if (msg.images.length === 1 && savedScanImages !== null) {
             const selectedId = msg.images[0].id;
-            const indexInScan = savedScanImages.findIndex(img => img.id === selectedId);
+            let indexInScan = savedScanImages.findIndex(img => img.id === selectedId);
             
             if (indexInScan !== -1) {
                 isReviewMode = true;
+                currentTab = 'ppi';
                 currentImages = savedScanImages;
                 currentIndex = indexInScan;
                 listContext = "Scan";
                 listTotal = savedScanTotal;
                 renderImage();
                 return;
+            } else if (savedScanCCImages !== null) {
+                indexInScan = savedScanCCImages.findIndex(img => img.id === selectedId);
+                if (indexInScan !== -1) {
+                    isReviewMode = true;
+                    currentTab = 'cc';
+                    currentImages = savedScanCCImages;
+                    currentIndex = indexInScan;
+                    listContext = "Scan";
+                    listTotal = savedScanTotal;
+                    renderImage();
+                    return;
+                }
             }
         }
 
@@ -382,20 +538,32 @@
         listTotal = msg.images.length; 
         listContext = "Selection"; 
         
+        if (msg.selectedIds) {
+          initialSelectionIds = msg.selectedIds;
+        }
+
+        if (msg.images.length > 1) {
+          savedScanImages = msg.images;
+          savedScanCCImages = null;
+          savedScanTotal = msg.images.length;
+          currentTab = 'ppi';
+        }
+
         if (currentImages.length === 0) renderEmpty(); 
         else if (currentImages.length === 1) { currentIndex = 0; renderImage(); } 
         else renderList();
       } 
-      else if (msg.type === "clear") {
+      else if (msg.type === "clear" || msg.type === "scan-cancelled") {
         isReviewMode = false;
-        if (savedScanImages !== null) {
-          currentImages = savedScanImages;
+        if (msg.type !== "scan-cancelled" && savedScanImages !== null) {
+          currentImages = currentTab === 'ppi' ? savedScanImages : savedScanCCImages;
           listTotal = savedScanTotal;
           listContext = "Scan";
           renderList();
         } else {
           currentImages = [];
           currentIndex = 0;
+          initialSelectionIds = [];
           renderEmpty();
         }
       }
@@ -405,8 +573,15 @@
         if (pb) pb.style.width = pct + '%'; if (st) st.textContent = `Scanning images... ${Math.round(pct)}%`; if (ct) ct.textContent = `${msg.current} / ${msg.total}`;
       }
       else if (msg.type === "scan-results") { 
-        savedScanImages = msg.images; listTotal = msg.total; savedScanTotal = msg.total;
-        currentImages = msg.images; listContext = "Scan"; isReviewMode = false; renderList(); 
+        savedScanImages = msg.images; 
+        savedScanCCImages = msg.ccImages || null;
+        listTotal = msg.total; 
+        savedScanTotal = msg.total;
+        currentTab = 'ppi';
+        currentImages = msg.images; 
+        listContext = "Scan"; 
+        isReviewMode = false; 
+        renderList(); 
       }
       else if (msg.type === "download-file") {
         const blob = new Blob([msg.bytes], { type: 'image/png' });
