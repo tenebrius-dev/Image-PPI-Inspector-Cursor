@@ -305,6 +305,7 @@ figma.ui.onmessage = async (msg) => {
     }
 
     if (msg.type === 'download-image-cc' && msg.nodeId) {
+        let tempRect: RectangleNode | null = null;
         try {
             const node = await figma.getNodeByIdAsync(msg.nodeId) as SceneNode;
             if (!node) throw new Error("Layer not found.");
@@ -322,7 +323,7 @@ figma.ui.onmessage = async (msg) => {
             const size = await image.getSizeAsync();
             
             // Временная нода для рендера
-            const tempRect = figma.createRectangle();
+            tempRect = figma.createRectangle();
             tempRect.name = "Export_Temp";
             tempRect.resize(size.width, size.height);
             tempRect.x = node.x - 20000;
@@ -350,12 +351,12 @@ figma.ui.onmessage = async (msg) => {
             };
 
             const bytes = await tempRect.exportAsync(exportSettings);
-            
-            tempRect.remove(); 
-            
             figma.ui.postMessage({ type: 'download-file', bytes: bytes, name: node.name + "_CC" });
         } catch (err: any) {
             figma.notify("Error downloading CC image: " + err.message);
+        } finally {
+            // Гарантируем удаление временной ноды даже при ошибке
+            if (tempRect) tempRect.remove();
         }
     }
 };
