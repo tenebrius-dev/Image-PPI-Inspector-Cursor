@@ -136,21 +136,29 @@ async function calculateNodeData(node: SceneNode): Promise<any | null> {
 
 async function checkSelection() {
     const selection = figma.currentPage.selection;
-    const imageNodes = findAllImageNodes(selection);
     
-    if (imageNodes.length === 0) {
+    if (selection.length === 0) {
         figma.ui.postMessage({ type: "clear" });
         return;
     }
     
-    const imagesDataRaw = await Promise.all(imageNodes.map(node => calculateNodeData(node)));
-    const imagesData = imagesDataRaw.filter(data => data !== null);
+    const imageNodes = findAllImageNodes(selection);
     
-    figma.ui.postMessage({ 
-        type: "images-list", 
-        images: imagesData,
-        selectedIds: selection.map(node => node.id)
-    });
+    if (imageNodes.length === 1) {
+        // Одно изображение — показываем детали автоматически
+        const data = await calculateNodeData(imageNodes[0]);
+        if (data) {
+            figma.ui.postMessage({ 
+                type: "images-list", 
+                images: [data],
+                selectedIds: selection.map(node => node.id)
+            });
+        }
+        return;
+    }
+    
+    // 0 или несколько изображений — не сканируем автоматически, обновляем кнопку в UI
+    figma.ui.postMessage({ type: "selection-context", hasSelection: true });
 }
 
 figma.on("selectionchange", checkSelection);
@@ -213,7 +221,7 @@ figma.ui.onmessage = async (msg) => {
         cancelScanRequested = false;
         await yieldToUI();
 
-        let nodesToScan = msg.scope === 'project' ? figma.root.children : figma.currentPage.children;
+        let nodesToScan = msg.scope === 'selection' ? figma.currentPage.selection : msg.scope === 'project' ? figma.root.children : figma.currentPage.children;
         const allImageNodes = await findAllImageNodesAsync(nodesToScan);
         
         if (cancelScanRequested) {

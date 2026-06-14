@@ -154,6 +154,8 @@
     let savedScanCCImages = null;
     let savedScanTotal = 0;
     let initialSelectionIds = [];
+    let hasSelection = false;
+    let scanCcChecked = false;
 
     function escapeHtml(str) {
       if (!str) return "";
@@ -222,24 +224,28 @@
 
     window.updateScanButton = function() {
       const ccChecked = document.getElementById('scan-cc').checked;
+      scanCcChecked = ccChecked;
       const btn = document.getElementById('scan-btn');
+      const scope = hasSelection ? 'Selected' : 'Page';
       if (ccChecked) {
-          btn.textContent = `Scan Page (PPI & CC)`;
+          btn.textContent = `Scan ${scope} (PPI & CC)`;
       } else {
-          btn.textContent = `Scan Page for Low PPI`;
+          btn.textContent = `Scan ${scope} for Low PPI`;
       }
     };
 
     function renderEmpty() {
       const app = document.getElementById('app');
+      const scope = hasSelection ? 'Selected' : 'Page';
+      const btnText = scanCcChecked ? `Scan ${scope} (PPI & CC)` : `Scan ${scope} for Low PPI`;
       app.innerHTML = `
         <div class="empty-state">
           <div class="empty-state-content"><div>Select an image to inspect...</div></div>
           <div style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
             <label style="font-size: 11px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; user-select: none; margin-bottom: 8px;">
-                <input type="checkbox" id="scan-cc" style="margin:0;" onchange="updateScanButton()"> Color Correction Check
+                <input type="checkbox" id="scan-cc" style="margin:0;" onchange="updateScanButton()" ${scanCcChecked ? 'checked' : ''}> Color Correction Check
             </label>
-            <button class="btn-secondary" id="scan-btn" onclick="startScan()">Scan Page for Low PPI</button>
+            <button class="btn-secondary" id="scan-btn" onclick="startScan()">${btnText}</button>
           </div>
         </div>
       `;
@@ -261,7 +267,7 @@
         </div>
       `;
       updateSize();
-      parent.postMessage({ pluginMessage: { type: 'scan', scope: 'page', includeCC: ccChecked } }, '*');
+      parent.postMessage({ pluginMessage: { type: 'scan', scope: hasSelection ? 'selection' : 'page', includeCC: ccChecked } }, '*');
     }
 
     window.cancelScan = function() {
@@ -545,12 +551,7 @@
           initialSelectionIds = msg.selectedIds;
         }
 
-        if (msg.images.length > 1) {
-          savedScanImages = msg.images;
-          savedScanCCImages = null;
-          savedScanTotal = msg.images.length;
-          currentTab = 'ppi';
-        }
+
 
         if (currentImages.length === 0) renderEmpty(); 
         else if (currentImages.length === 1) { currentIndex = 0; renderImage(); } 
@@ -558,6 +559,7 @@
       } 
       else if (msg.type === "clear" || msg.type === "scan-cancelled") {
         isReviewMode = false;
+        if (msg.type === "clear") hasSelection = false;
         if (msg.type !== "scan-cancelled" && savedScanImages !== null) {
           currentImages = currentTab === 'ppi' ? savedScanImages : savedScanCCImages;
           listTotal = savedScanTotal;
@@ -567,6 +569,14 @@
           currentImages = [];
           currentIndex = 0;
           initialSelectionIds = [];
+          renderEmpty();
+        }
+      }
+      else if (msg.type === "selection-context") {
+        hasSelection = msg.hasSelection;
+        if (savedScanImages === null && !isReviewMode) {
+          currentImages = [];
+          currentIndex = 0;
           renderEmpty();
         }
       }
