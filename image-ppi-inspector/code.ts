@@ -343,11 +343,8 @@ figma.ui.onmessage = async (msg) => {
             
             tempRect.fills = [newFill];
 
-            if (node.parent) {
-                node.parent.insertChild(0, tempRect);
-            } else {
-                figma.currentPage.appendChild(tempRect);
-            }
+            // Добавляем строго на страницу, чтобы избежать обрезки (clipping), масок и прозрачности родительских фреймов
+            figma.currentPage.appendChild(tempRect);
 
             const exportScale = size.width / tempRect.width;
 
