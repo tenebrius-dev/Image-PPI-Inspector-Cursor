@@ -11,22 +11,29 @@ function clone(val: any): any {
     return JSON.parse(JSON.stringify(val));
 }
 
+function getTopVisibleImageFill(fills: readonly Paint[] | typeof figma.mixed): ImagePaint | null {
+    if (!fills || fills === figma.mixed || !Array.isArray(fills)) return null;
+    for (let i = fills.length - 1; i >= 0; i--) {
+        const fill = fills[i];
+        if (fill.type === 'IMAGE' && fill.imageHash && fill.visible !== false) {
+            return fill as ImagePaint;
+        }
+    }
+    return null;
+}
+
 function findAllImageNodes(nodes: readonly SceneNode[]): SceneNode[] {
     let imageNodes: SceneNode[] = [];
     for (const node of nodes) {
         if (!node.visible) continue;
-        if ('fills' in node && node.fills !== figma.mixed && Array.isArray(node.fills)) {
-            if (node.fills.some(fill => fill.type === 'IMAGE' && fill.imageHash)) {
-                imageNodes.push(node);
-            }
+        if ('fills' in node && getTopVisibleImageFill(node.fills)) {
+            imageNodes.push(node);
         }
         if ('findAll' in node) {
             const children = node.findAll(child => {
                 return child.visible && 
                        'fills' in child && 
-                       child.fills !== figma.mixed && 
-                       Array.isArray(child.fills) && 
-                       child.fills.some(fill => fill.type === 'IMAGE' && fill.imageHash);
+                       getTopVisibleImageFill(child.fills) !== null;
             });
             imageNodes = imageNodes.concat(children as SceneNode[]);
         }
@@ -42,10 +49,8 @@ async function findAllImageNodesAsync(nodes: readonly BaseNode[]): Promise<Scene
             if (cancelScanRequested) return;
             if ('visible' in node && !node.visible) continue;
             
-            if ('fills' in node && node.fills !== figma.mixed && Array.isArray(node.fills)) {
-                if (node.fills.some(fill => fill.type === 'IMAGE' && fill.imageHash)) {
-                    imageNodes.push(node as SceneNode);
-                }
+            if ('fills' in node && getTopVisibleImageFill(node.fills)) {
+                imageNodes.push(node as SceneNode);
             }
             if ('children' in node) {
                 await traverse((node as any).children);
@@ -62,7 +67,7 @@ async function calculateNodeData(node: SceneNode): Promise<any | null> {
     try {
         if (!('fills' in node) || node.fills === figma.mixed || !Array.isArray(node.fills)) return null;
         
-        const fill = node.fills.find(f => f.type === 'IMAGE' && f.imageHash);
+        const fill = getTopVisibleImageFill(node.fills);
         if (!fill) return null;
 
         const image = figma.getImageByHash(fill.imageHash);
@@ -298,7 +303,7 @@ figma.ui.onmessage = async (msg) => {
                 throw new Error("No valid fills found.");
             }
 
-            const fill = node.fills.find(f => f.type === 'IMAGE');
+            const fill = getTopVisibleImageFill(node.fills);
             if (!fill || !fill.imageHash) throw new Error("No image fill found.");
 
             const image = figma.getImageByHash(fill.imageHash);
@@ -322,7 +327,7 @@ figma.ui.onmessage = async (msg) => {
                 throw new Error("No valid fills found.");
             }
             
-            const originalFill = node.fills.find(f => f.type === 'IMAGE');
+            const originalFill = getTopVisibleImageFill(node.fills);
             if (!originalFill || !originalFill.imageHash) throw new Error("No image fill.");
             
             const image = figma.getImageByHash(originalFill.imageHash);
